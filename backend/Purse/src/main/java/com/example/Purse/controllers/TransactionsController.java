@@ -1,11 +1,15 @@
 package com.example.Purse.controllers;
 
+import com.example.Purse.dto.BalanceRequest;
 import com.example.Purse.dto.TransactionRequest;
 import com.example.Purse.entity.Transaction;
+import com.example.Purse.entity.Users;
 import com.example.Purse.service.TransactionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
 
 @RestController
 @RequestMapping("/api/transactions")
@@ -39,5 +43,22 @@ public class TransactionsController {
 
         transactionService.deleteTransaction(userId, id);
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/set/balance")
+    public ResponseEntity<Users> setBalance(
+            @RequestHeader("User-ID") Long userId,
+            @RequestBody BalanceRequest request) {
+
+        Users user = transactionService.setInitialBalance(userId, request);
+        return ResponseEntity.ok(user);
+    }
+
+    @GetMapping("/balance")
+    public ResponseEntity<BigDecimal> getCurrentBalance(
+            @RequestHeader("User-ID") Long userId) {
+
+        BigDecimal balance = transactionService.calculateCurrentBalance(userId);
+        return ResponseEntity.ok(balance);
     }
 }
