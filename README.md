@@ -1,78 +1,78 @@
 ```markdown
-# Purse Finance API
+# 💰 Purse - Личный финансовый менеджер
 
-Simple REST API for personal finance management.
+Простое и удобное REST API для учета личных финансов.
 
-## API Endpoints
+## 🚀 Быстрый старт
 
-### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login user
-
-### Transactions  
-- `POST /api/transactions/income` - Add income
-- `POST /api/transactions/expense` - Add expense
-- `DELETE /api/transactions/delete/{id}` - Delete transaction
-- `POST /api/transactions/set/balance` - Set initial balance
-- `GET /api/transactions/balance` - Get current balance
-
-## Quick Start
-
-1. Register user:
+### 1. Регистрация пользователя
 ```bash
 curl -X POST http://localhost:8080/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"username":"user","password":"pass"}'
+  -d '{"username": "user", "password": "pass"}'
 ```
 
-2. Login (save user ID):
+### 2. Вход в систему
 ```bash
 curl -X POST http://localhost:8080/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"user","password":"pass"}'
+  -d '{"username": "user", "password": "pass"}'
 ```
+*Сохраните полученный ID пользователя*
 
-3. Set balance:
+### 3. Установка начального баланса
 ```bash
 curl -X POST http://localhost:8080/api/transactions/set/balance \
   -H "User-ID: 1" \
   -H "Content-Type: application/json" \
-  -d '{"balance":50000}'
+  -d '{"balance": 50000}'
 ```
 
-4. Add income:
+### 4. Добавление дохода
 ```bash
 curl -X POST http://localhost:8080/api/transactions/income \
   -H "User-ID: 1" \
   -H "Content-Type: application/json" \
-  -d '{"amount":200,"description":"Salary"}'
+  -d '{"amount": 200, "description": "Подработка"}'
 ```
 
-5. Add expense:
+### 5. Добавление расхода
 ```bash
 curl -X POST http://localhost:8080/api/transactions/expense \
   -H "User-ID: 1" \
   -H "Content-Type: application/json" \
-  -d '{"amount":150,"description":"Food"}'
+  -d '{"amount": 150, "description": "Кафе"}'
 ```
 
-6. Check balance:
+### 6. Проверка баланса
 ```bash
 curl -X GET http://localhost:8080/api/transactions/balance \
   -H "User-ID: 1"
 ```
 
-## Features
-- User registration and authentication
-- Income/expense tracking  
-- Balance calculation
-- Secure transaction deletion
-- Balance protection (no negative values)
+### 7. Удаление операции
+```bash
+curl -X DELETE http://localhost:8080/api/transactions/delete/1 \
+  -H "User-ID: 1"
+```
 
-## Tech Stack
+## 📊 Пример расчета баланса
+```
+Начальный баланс: 50000
++ Доход: 200
+- Расход: 150
+Итоговый баланс: 50050
+```
+
+## 🛠 Технологии
 - Java 25
 - Spring Boot 3.5.7
-- SQLite database
+- SQLite
 - JPA/Hibernate
 - Maven
-```
+
+## 🔐 Особенности
+- ✅ Безопасная авторизация
+- ✅ Проверка прав доступа
+- ✅ Баланс не уходит в минус
+- ✅ Автоматический расчет
