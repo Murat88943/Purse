@@ -80,4 +80,8 @@ public class TransactionService {
         // 5. Баланс не может быть меньше 0
         return currentBalance.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : currentBalance;
     }
+
+    public List<Transaction> getUserTransactions(Long userId) {
+        return transactionRepository.findByUserIdOrderByCreatedAtDesc(userId);
+    }
 }

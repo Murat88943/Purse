@@ -1,46 +1,178 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
 import './Auth.css'
 
 const AuthPage = () => {
   const [isLogin, setIsLogin] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
+  const [errors, setErrors] = useState({})
   const [formData, setFormData] = useState({
-    email: '',
+    username: '',
     password: '',
     confirmPassword: '',
-    username: '',
   })
   const navigate = useNavigate()
 
+  // Базовый URL для API
+  const API_BASE_URL = 'http://localhost:8080/api'
+
+  // Создаем axios instance с настройками
+  const api = axios.create({
+    baseURL: API_BASE_URL,
+    timeout: 10000,
+  })
+
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    })
+    const { name, value } = e.target
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
+
+    if (errors[name]) {
+      setErrors((prev) => ({
+        ...prev,
+        [name]: '',
+      }))
+    }
   }
 
-  const handleSubmit = (e) => {
+  const validateForm = () => {
+    const newErrors = {}
+
+    if (!formData.username.trim()) {
+      newErrors.username = 'Имя пользователя обязательно'
+    }
+
+    if (!formData.password) {
+      newErrors.password = 'Пароль обязателен'
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Пароль должен содержать минимум 6 символов'
+    }
+
+    if (!isLogin) {
+      if (!formData.confirmPassword) {
+        newErrors.confirmPassword = 'Подтверждение пароля обязательно'
+      } else if (formData.password !== formData.confirmPassword) {
+        newErrors.confirmPassword = 'Пароли не совпадают'
+      }
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleRegister = async () => {
+    try {
+      const response = await api.post('/auth/register', {
+        username: formData.username,
+        password: formData.password,
+      })
+
+      if (response.status === 200) {
+        return response.data.userId
+      }
+    } catch (error) {
+      if (error.response?.data) {
+        throw new Error(error.response.data)
+      } else if (error.code === 'NETWORK_ERROR') {
+        throw new Error(
+          'Нет соединения с сервером. Проверьте запущен ли бэкенд.',
+        )
+      } else {
+        throw new Error('Ошибка при регистрации. Попробуйте снова.')
+      }
+    }
+  }
+
+  const handleLogin = async () => {
+    try {
+      const response = await api.post('/auth/login', {
+        username: formData.username,
+        password: formData.password,
+      })
+
+      if (response.status === 200) {
+        const userData = response.data
+
+        // Сохраняем данные пользователя в localStorage
+        const userStorage = {
+          userId: userData.id,
+          username: userData.username,
+          isAuthenticated: true,
+          loginTime: new Date().toISOString(),
+        }
+        localStorage.setItem('user', JSON.stringify(userStorage))
+
+        return userData
+      }
+    } catch (error) {
+      if (error.response?.status === 401) {
+        throw new Error('Неверное имя пользователя или пароль')
+      } else if (error.response?.data) {
+        throw new Error(error.response.data)
+      } else if (error.code === 'NETWORK_ERROR') {
+        throw new Error(
+          'Нет соединения с сервером. Проверьте запущен ли бэкенд.',
+        )
+      } else {
+        throw new Error('Ошибка при входе. Попробуйте снова.')
+      }
+    }
+  }
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
 
-    if (!isLogin && formData.password !== formData.confirmPassword) {
-      alert('Пароли не совпадают!')
+    if (!validateForm()) {
       return
     }
 
-    console.log('Отправка данных:', {
-      email: formData.email,
-      password: formData.password,
-      username: formData.username,
-    })
+    setIsLoading(true)
+    setErrors({})
 
-    // Перенаправление на /home после успешной отправки
-    navigate('/home')
+    try {
+      let result
+      if (isLogin) {
+        // Логин
+        result = await handleLogin()
+        alert('Вход выполнен успешно!')
+      } else {
+        // Регистрация
+        result = await handleRegister()
+        alert('Регистрация прошла успешно!')
 
+        // После регистрации автоматически логинимся
+        if (result) {
+          await handleLogin()
+        }
+      }
+
+      // Перенаправление на /home после успешной аутентификации
+      navigate('/home')
+
+      // Сброс формы
+      setFormData({
+        username: '',
+        password: '',
+        confirmPassword: '',
+      })
+    } catch (error) {
+      console.error('Ошибка аутентификации:', error)
+      setErrors({ submit: error.message })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const switchMode = () => {
+    setIsLogin(!isLogin)
+    setErrors({})
     setFormData({
-      email: '',
+      username: '',
       password: '',
       confirmPassword: '',
-      username: '',
     })
   }
 
@@ -50,33 +182,28 @@ const AuthPage = () => {
       <div className="auth-hero">
         <div className="hero-content">
           <div className="logo">
-            <div className="logo-icon">⚡</div>
+            <div className="logo-icon">💰</div>
             <h1>Purse</h1>
           </div>
-          <h2>Добро пожаловать в наше сообщество</h2>
+          <h2>Управляйте своими финансами</h2>
           <p>
-            Присоединяйтесь к тысячам пользователей, которые уже используют наш
-            сервис
+            Присоединяйтесь к нашему сервису для удобного учета доходов и
+            расходов
           </p>
           <div className="features">
+            <div className="feature">
+              <span className="feature-icon">📊</span>
+              <span>Учет финансов</span>
+            </div>
+            <div className="feature">
+              <span className="feature-icon">⚡</span>
+              <span>Простота</span>
+            </div>
             <div className="feature">
               <span className="feature-icon">🔒</span>
               <span>Безопасность</span>
             </div>
-            <div className="feature">
-              <span className="feature-icon">⚡</span>
-              <span>Скорость</span>
-            </div>
-            <div className="feature">
-              <span className="feature-icon">🎯</span>
-              <span>Простота</span>
-            </div>
           </div>
-        </div>
-        <div className="floating-elements">
-          <div className="floating-circle circle-1"></div>
-          <div className="floating-circle circle-2"></div>
-          <div className="floating-circle circle-3"></div>
         </div>
       </div>
 
@@ -85,43 +212,28 @@ const AuthPage = () => {
         <div className="auth-container">
           <div className="auth-card">
             <div className="auth-header">
-              <h2>{isLogin ? 'С возвращением!' : 'Создать аккаунт'}</h2>
+              <h2>{isLogin ? 'Вход в систему' : 'Регистрация'}</h2>
               <p className="auth-subtitle">
-                {isLogin
-                  ? 'Войдите в свой аккаунт'
-                  : 'Зарегистрируйтесь для начала работы'}
+                {isLogin ? 'Войдите в свой аккаунт' : 'Создайте новый аккаунт'}
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="auth-form">
-              {!isLogin && (
-                <div className="form-group">
-                  <label htmlFor="username">Имя пользователя</label>
-                  <input
-                    type="text"
-                    id="username"
-                    name="username"
-                    value={formData.username}
-                    onChange={handleChange}
-                    required={!isLogin}
-                    placeholder="Ваше имя"
-                    className="modern-input"
-                  />
-                </div>
-              )}
-
               <div className="form-group">
-                <label htmlFor="email">Email</label>
+                <label htmlFor="username">Имя пользователя</label>
                 <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={formData.email}
+                  type="text"
+                  id="username"
+                  name="username"
+                  value={formData.username}
                   onChange={handleChange}
                   required
-                  placeholder="your@email.com"
-                  className="modern-input"
+                  placeholder="Введите имя пользователя"
+                  className={`modern-input ${errors.username ? 'error' : ''}`}
                 />
+                {errors.username && (
+                  <span className="error-message">{errors.username}</span>
+                )}
               </div>
 
               <div className="form-group">
@@ -135,8 +247,11 @@ const AuthPage = () => {
                   required
                   placeholder="Минимум 6 символов"
                   minLength="6"
-                  className="modern-input"
+                  className={`modern-input ${errors.password ? 'error' : ''}`}
                 />
+                {errors.password && (
+                  <span className="error-message">{errors.password}</span>
+                )}
               </div>
 
               {!isLogin && (
@@ -151,26 +266,35 @@ const AuthPage = () => {
                     required={!isLogin}
                     placeholder="Повторите пароль"
                     minLength="6"
-                    className="modern-input"
+                    className={`modern-input ${
+                      errors.confirmPassword ? 'error' : ''
+                    }`}
                   />
+                  {errors.confirmPassword && (
+                    <span className="error-message">
+                      {errors.confirmPassword}
+                    </span>
+                  )}
                 </div>
               )}
 
-              {isLogin && (
-                <div className="form-options">
-                  <label className="checkbox-label">
-                    <input type="checkbox" />
-                    <span className="checkmark"></span>
-                    Запомнить меня
-                  </label>
-                  <a href="#forgot" className="forgot-link">
-                    Забыли пароль?
-                  </a>
+              {/* Общая ошибка */}
+              {errors.submit && (
+                <div className="error-message submit-error">
+                  {errors.submit}
                 </div>
               )}
 
-              <button type="submit" className="submit-btn modern-btn">
-                {isLogin ? 'Войти' : 'Создать аккаунт'}
+              <button
+                type="submit"
+                className="submit-btn modern-btn"
+                disabled={isLoading}
+              >
+                {isLoading
+                  ? 'Загрузка...'
+                  : isLogin
+                  ? 'Войти'
+                  : 'Зарегистрироваться'}
               </button>
             </form>
 
@@ -179,7 +303,8 @@ const AuthPage = () => {
                 {isLogin ? 'Еще нет аккаунта?' : 'Уже есть аккаунт?'}{' '}
                 <button
                   className="switch-link"
-                  onClick={() => setIsLogin(!isLogin)}
+                  onClick={switchMode}
+                  type="button"
                 >
                   {isLogin ? 'Зарегистрироваться' : 'Войти'}
                 </button>

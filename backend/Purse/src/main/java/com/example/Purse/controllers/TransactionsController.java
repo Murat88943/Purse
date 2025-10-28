@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/transactions")
@@ -60,5 +61,12 @@ public class TransactionsController {
 
         BigDecimal balance = transactionService.calculateCurrentBalance(userId);
         return ResponseEntity.ok(balance);
+    }
+    @GetMapping("/history")
+    public ResponseEntity<List<Transaction>> getTransactionHistory(
+            @RequestHeader("User-ID") Long userId) {
+
+        List<Transaction> transactions = transactionService.getUserTransactions(userId);
+        return ResponseEntity.ok(transactions);
     }
 }

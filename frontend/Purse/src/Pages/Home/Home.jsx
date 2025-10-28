@@ -1,181 +1,320 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
 import './Home.css'
 
 const HomePage = () => {
   const navigate = useNavigate()
   const [balance, setBalance] = useState(0)
   const [showAddForm, setShowAddForm] = useState(false)
-  const [formType, setFormType] = useState('') // 'income' или 'expense'
-  const [transactions, setTransactions] = useState([
-    {
-      id: 1,
-      name: 'Зарплата',
-      amount: 0,
-      type: 'income',
-      date: '2024-01-15',
-    },
-    {
-      id: 2,
-      name: 'Продукты',
-      amount: 0,
-      type: 'expense',
-      date: '2024-01-14',
-    },
-    { id: 3, name: 'Кафе', amount: 0, type: 'expense', date: '2024-01-13' },
-    {
-      id: 4,
-      name: 'Фриланс',
-      amount: 0,
-      type: 'income',
-      date: '2024-01-12',
-    },
-  ])
+  const [showBalanceForm, setShowBalanceForm] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [formType, setFormType] = useState('')
+  const [transactions, setTransactions] = useState([])
   const [newTransaction, setNewTransaction] = useState({
-    name: '',
+    description: '',
     amount: '',
-    type: '',
+  })
+  const [initialBalance, setInitialBalance] = useState('')
+  const [balancePulse, setBalancePulse] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const API_BASE_URL = 'http://localhost:8080/api'
+  const user = JSON.parse(localStorage.getItem('user') || '{}')
+  const userId = user.userId
+
+  const api = axios.create({
+    baseURL: API_BASE_URL,
+    timeout: 10000,
   })
 
+  useEffect(() => {
+    if (!userId) {
+      navigate('/')
+      return
+    }
+    loadBalance()
+  }, [userId, navigate])
+
+  const loadBalance = async () => {
+    try {
+      const response = await api.get('/transactions/balance', {
+        headers: { 'User-ID': userId },
+      })
+      setBalance(response.data)
+    } catch (error) {
+      console.error('Ошибка загрузки баланса:', error)
+    }
+  }
+
+  const loadTransactions = async () => {
+    try {
+      const response = await api.get('/transactions/history', {
+        headers: { 'User-ID': userId },
+      })
+      setTransactions(response.data)
+    } catch (error) {
+      console.error('Ошибка загрузки транзакций:', error)
+    }
+  }
+
   const handleLogout = () => {
+    localStorage.removeItem('user')
     navigate('/')
   }
 
   const handleAddTransaction = (type) => {
     setFormType(type)
     setShowAddForm(true)
-    setNewTransaction({ name: '', amount: '', type: type })
+    setNewTransaction({ description: '', amount: '' })
   }
 
-  const handleSubmitTransaction = (e) => {
+  const handleSetBalance = async (e) => {
     e.preventDefault()
-    if (!newTransaction.name || !newTransaction.amount) return
 
-    const transaction = {
-      id: Date.now(),
-      name: newTransaction.name,
-      amount: parseFloat(newTransaction.amount),
-      type: formType,
-      date: new Date().toISOString().split('T')[0],
+    const amount = parseFloat(initialBalance)
+    if (isNaN(amount) || amount < 0) {
+      alert('Пожалуйста, введите корректную сумму')
+      return
     }
 
-    setTransactions([transaction, ...transactions])
+    setIsLoading(true)
 
-    // Обновляем баланс
-    if (formType === 'income') {
-      setBalance(balance + transaction.amount)
-    } else {
-      setBalance(balance - transaction.amount)
+    try {
+      await api.post(
+        '/transactions/set/balance',
+        {
+          balance: amount,
+        },
+        {
+          headers: { 'User-ID': userId },
+        },
+      )
+
+      await loadBalance()
+      setShowBalanceForm(false)
+      setInitialBalance('')
+      alert('Баланс установлен!')
+    } catch (error) {
+      console.error('Ошибка установки баланса:', error)
+      alert('Ошибка установки баланса')
+    } finally {
+      setIsLoading(false)
     }
-
-    setShowAddForm(false)
-    setNewTransaction({ name: '', amount: '', type: '' })
   }
 
-  const handleDeleteTransaction = (id, amount, type) => {
-    setTransactions(transactions.filter((t) => t.id !== id))
+  const handleSubmitTransaction = async (e) => {
+    e.preventDefault()
 
-    // Обновляем баланс
-    if (type === 'income') {
-      setBalance(balance - amount)
-    } else {
-      setBalance(balance + amount)
+    if (!newTransaction.description.trim() || !newTransaction.amount) {
+      alert('Пожалуйста, заполните все поля')
+      return
     }
+
+    const amount = parseFloat(newTransaction.amount)
+    if (isNaN(amount) || amount <= 0) {
+      alert('Пожалуйста, введите корректную сумму')
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      const endpoint =
+        formType === 'income' ? '/transactions/income' : '/transactions/expense'
+
+      await api.post(
+        endpoint,
+        {
+          amount: amount,
+          description: newTransaction.description.trim(),
+        },
+        {
+          headers: { 'User-ID': userId },
+        },
+      )
+
+      await loadBalance()
+      setShowAddForm(false)
+      setNewTransaction({ description: '', amount: '' })
+      alert('Транзакция добавлена!')
+    } catch (error) {
+      console.error('Ошибка добавления транзакции:', error)
+      alert('Ошибка добавления транзакции')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleDeleteTransaction = async (id) => {
+    if (!window.confirm('Вы уверены, что хотите удалить эту транзакцию?')) {
+      return
+    }
+
+    try {
+      await api.delete(`/transactions/delete/${id}`, {
+        headers: { 'User-ID': userId },
+      })
+
+      await loadTransactions()
+      await loadBalance()
+      alert('Транзакция удалена!')
+    } catch (error) {
+      console.error('Ошибка удаления транзакции:', error)
+      alert('Ошибка удаления транзакции')
+    }
+  }
+
+  const handleShowHistory = async () => {
+    await loadTransactions()
+    setShowHistory(true)
   }
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('ru-RU', {
       style: 'currency',
       currency: 'RUB',
+      minimumFractionDigits: 0,
     }).format(amount)
   }
 
+  const formatDate = (dateString) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    })
+  }
+
+  const totalIncome = transactions
+    .filter((t) => t.type === 'INCOME')
+    .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+
+  const totalExpenses = transactions
+    .filter((t) => t.type === 'EXPENSE')
+    .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+
   return (
     <div className="home-page">
-      {/* Шапка */}
       <header className="home-header">
         <div className="header-content">
           <div className="header-info">
             <h1>Purse 💰</h1>
-            <p>Ваш финансовый помощник</p>
           </div>
-          <button onClick={handleLogout} className="logout-btn">
-            Выйти
-          </button>
+          <div className="header-actions">
+            <button
+              className="balance-btn"
+              onClick={() => setShowBalanceForm(true)}
+              title="Установить начальный баланс"
+            >
+              💵 Баланс
+            </button>
+            <button onClick={handleLogout} className="logout-btn">
+              Выйти
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="home-main">
-        {/* Карточка баланса */}
-        <div className="balance-card">
+        {/* Карточка с балансом и статистикой */}
+        <div className={`balance-card ${balancePulse ? 'pulse' : ''}`}>
           <div className="balance-header">
-            <h2>Общий баланс</h2>
+            <h2>ОБЩИЙ БАЛАНС</h2>
             <div className="balance-amount">{formatCurrency(balance)}</div>
-          </div>
-          <div className="balance-stats">
-            <div className="stat-item">
-              <span className="stat-label">Доходы</span>
-              <span className="stat-amount income">
-                +
-                {formatCurrency(
-                  transactions
-                    .filter((t) => t.type === 'income')
-                    .reduce((sum, t) => sum + t.amount, 0),
-                )}
-              </span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Расходы</span>
-              <span className="stat-amount expense">
-                -
-                {formatCurrency(
-                  transactions
-                    .filter((t) => t.type === 'expense')
-                    .reduce((sum, t) => sum + t.amount, 0),
-                )}
-              </span>
-            </div>
           </div>
         </div>
 
-        {/* Кнопки добавления */}
+        {/* Кнопки действий */}
         <div className="action-buttons">
           <button
             className="action-btn income-btn"
             onClick={() => handleAddTransaction('income')}
+            disabled={isLoading}
           >
             <span className="btn-icon">+</span>
-            <span>Добавить доход</span>
+            <span>Доход</span>
           </button>
+
           <button
             className="action-btn expense-btn"
             onClick={() => handleAddTransaction('expense')}
+            disabled={isLoading}
           >
             <span className="btn-icon">-</span>
-            <span>Добавить расход</span>
+            <span>Расход</span>
           </button>
         </div>
 
+        {/* Центральная кнопка истории */}
+        <div className="history-section">
+          <button className="history-btn" onClick={handleShowHistory}>
+            📊 История транзакций
+          </button>
+        </div>
+
+        {/* Форма установки баланса */}
+        {showBalanceForm && (
+          <div
+            className="modal-overlay"
+            onClick={() => setShowBalanceForm(false)}
+          >
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <h3>💵 Установить начальный баланс</h3>
+              <form onSubmit={handleSetBalance}>
+                <div className="form-group">
+                  <input
+                    type="number"
+                    placeholder="Сумма в рублях"
+                    value={initialBalance}
+                    onChange={(e) => setInitialBalance(e.target.value)}
+                    required
+                    min="0"
+                    step="0.01"
+                    autoFocus
+                  />
+                </div>
+                <div className="form-actions">
+                  <button
+                    type="button"
+                    onClick={() => setShowBalanceForm(false)}
+                    className="cancel-btn"
+                  >
+                    Отмена
+                  </button>
+                  <button type="submit" className="submit-btn">
+                    Установить
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* Форма добавления транзакции */}
         {showAddForm && (
-          <div className="add-form-overlay">
-            <div className="add-form">
+          <div className="modal-overlay" onClick={() => setShowAddForm(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
               <h3>
-                {formType === 'income' ? 'Добавить доход' : 'Добавить расход'}
+                {formType === 'income'
+                  ? '➕ Добавить доход'
+                  : '➖ Добавить расход'}
               </h3>
               <form onSubmit={handleSubmitTransaction}>
                 <div className="form-group">
                   <input
                     type="text"
-                    placeholder="Название"
-                    value={newTransaction.name}
+                    placeholder="Описание"
+                    value={newTransaction.description}
                     onChange={(e) =>
                       setNewTransaction({
                         ...newTransaction,
-                        name: e.target.value,
+                        description: e.target.value,
                       })
                     }
                     required
+                    autoFocus
                   />
                 </div>
                 <div className="form-group">
@@ -190,6 +329,8 @@ const HomePage = () => {
                       })
                     }
                     required
+                    min="1"
+                    step="0.01"
                   />
                 </div>
                 <div className="form-actions">
@@ -201,7 +342,9 @@ const HomePage = () => {
                     Отмена
                   </button>
                   <button type="submit" className="submit-btn">
-                    Добавить
+                    {formType === 'income'
+                      ? 'Добавить доход'
+                      : 'Добавить расход'}
                   </button>
                 </div>
               </form>
@@ -209,40 +352,96 @@ const HomePage = () => {
           </div>
         )}
 
-        {/* Список транзакций */}
-        <div className="transactions-section">
-          <div className="section-header">
-            <h3>Последние транзакции</h3>
-            <button className="view-all-btn">Посмотреть всю историю</button>
-          </div>
-
-          <div className="transactions-list">
-            {transactions.map((transaction) => (
-              <div key={transaction.id} className="transaction-item">
-                <div className="transaction-info">
-                  <div className="transaction-name">{transaction.name}</div>
-                  <div className="transaction-date">{transaction.date}</div>
-                </div>
-                <div className={`transaction-amount ${transaction.type}`}>
-                  {transaction.type === 'income' ? '+' : '-'}
-                  {formatCurrency(transaction.amount)}
-                </div>
+        {/* Модальное окно истории транзакций */}
+        {showHistory && (
+          <div
+            className="modal-overlay history-overlay"
+            onClick={() => setShowHistory(false)}
+          >
+            <div
+              className="modal history-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="history-header">
+                <h3>📊 История транзакций</h3>
                 <button
-                  className="delete-btn"
-                  onClick={() =>
-                    handleDeleteTransaction(
-                      transaction.id,
-                      transaction.amount,
-                      transaction.type,
-                    )
-                  }
+                  className="close-history-btn"
+                  onClick={() => setShowHistory(false)}
                 >
-                  🗑️
+                  ✕
                 </button>
               </div>
-            ))}
+
+              <div className="transactions-list">
+                {transactions.length === 0 ? (
+                  <div className="no-transactions">
+                    <p>Транзакций пока нет</p>
+                  </div>
+                ) : (
+                  transactions.map((transaction) => (
+                    <div
+                      key={transaction.id}
+                      className={`transaction-item ${
+                        transaction.type === 'INCOME' ? 'income' : 'expense'
+                      }`}
+                    >
+                      <div className="transaction-info">
+                        <div className="transaction-name">
+                          {transaction.description}
+                        </div>
+                        <div className="transaction-date">
+                          {formatDate(transaction.createdAt)}
+                        </div>
+                      </div>
+                      <div className="transaction-amount">
+                        <span
+                          className={`amount ${
+                            transaction.type === 'INCOME'
+                              ? 'positive'
+                              : 'negative'
+                          }`}
+                        >
+                          {transaction.type === 'INCOME' ? '+' : '-'}
+                          {formatCurrency(Math.abs(transaction.amount))}
+                        </span>
+                        <button
+                          className="delete-transaction-btn"
+                          onClick={() =>
+                            handleDeleteTransaction(transaction.id)
+                          }
+                          title="Удалить транзакцию"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="history-summary">
+                <div className="summary-item">
+                  <span>Всего доходов:</span>
+                  <span className="positive">
+                    +{formatCurrency(totalIncome)}
+                  </span>
+                </div>
+                <div className="summary-item">
+                  <span>Всего расходов:</span>
+                  <span className="negative">
+                    -{formatCurrency(totalExpenses)}
+                  </span>
+                </div>
+                <div className="summary-item total">
+                  <span>Текущий баланс:</span>
+                  <span className={balance >= 0 ? 'positive' : 'negative'}>
+                    {formatCurrency(balance)}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </main>
     </div>
   )
